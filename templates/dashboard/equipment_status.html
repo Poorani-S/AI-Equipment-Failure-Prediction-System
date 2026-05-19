@@ -1,0 +1,692 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - AI Equipment Prediction{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/equipment_status.css') }}?v=2.0">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="es-wrapper">
+
+  <!-- ── Page Header ── -->
+  <div class="es-page-header">
+    <div class="es-title-block">
+      <div class="es-icon-wrap">📊</div>
+      <div>
+        <h1 class="es-title">Dashboard</h1>
+        <p class="es-subtitle">Real-time monitoring · AI-powered health analysis</p>
+      </div>
+    </div>
+    <div class="es-header-right">
+      <div class="es-live-indicator">
+        <span class="es-live-dot"></span>
+        <span>LIVE</span>
+      </div>
+      <button class="es-refresh-btn" id="esRefreshBtn">⟳ Refresh</button>
+    </div>
+  </div>
+
+  <!-- ── Summary KPI Cards ── -->
+  <div class="es-kpi-row">
+    <div class="es-kpi-card es-kpi-good">
+      <div class="es-kpi-icon">✅</div>
+      <div class="es-kpi-body">
+        <span class="es-kpi-label">Good</span>
+        <span class="es-kpi-value" id="kpiGood">0</span>
+      </div>
+      <div class="es-kpi-ring" id="ringGood"></div>
+    </div>
+    <div class="es-kpi-card es-kpi-risk">
+      <div class="es-kpi-icon">⚠️</div>
+      <div class="es-kpi-body">
+        <span class="es-kpi-label">Risk</span>
+        <span class="es-kpi-value" id="kpiRisk">0</span>
+      </div>
+      <div class="es-kpi-ring" id="ringRisk"></div>
+    </div>
+    <div class="es-kpi-card es-kpi-critical">
+      <div class="es-kpi-icon">🚨</div>
+      <div class="es-kpi-body">
+        <span class="es-kpi-label">Critical</span>
+        <span class="es-kpi-value" id="kpiCritical">0</span>
+      </div>
+      <div class="es-kpi-ring" id="ringCritical"></div>
+    </div>
+    <div class="es-kpi-card es-kpi-total">
+      <div class="es-kpi-icon">🔧</div>
+      <div class="es-kpi-body">
+        <span class="es-kpi-label">Total Equipment</span>
+        <span class="es-kpi-value" id="kpiTotal">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Charts Grid ── -->
+  <div class="es-charts-grid">
+
+    <!-- Donut: Status Distribution -->
+    <div class="es-chart-card">
+      <div class="es-chart-header">
+        <h3>Status Distribution</h3>
+        <span class="es-chart-tag">Live</span>
+      </div>
+      <div class="es-chart-body es-donut-wrap">
+        <canvas id="statusDonutChart"></canvas>
+        <div class="es-donut-center">
+          <span id="donutCenterVal">0</span>
+          <small>Assets</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bar: Health Score by Equipment -->
+    <div class="es-chart-card">
+      <div class="es-chart-header">
+        <h3>Health Score Overview</h3>
+        <div class="es-slicer-row">
+          <label>Type:</label>
+          <select id="slicerType" class="es-slicer">
+            <option value="all">All Types</option>
+            <option value="Turbine">Turbine</option>
+            <option value="Pump">Pump</option>
+            <option value="Compressor">Compressor</option>
+          </select>
+          <label>Status:</label>
+          <select id="slicerStatus" class="es-slicer">
+            <option value="all">All Status</option>
+            <option value="good">Good</option>
+            <option value="risk">Risk</option>
+            <option value="critical">Critical</option>
+          </select>
+        </div>
+      </div>
+      <div class="es-chart-body">
+        <canvas id="healthBarChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Line: Failure Probability Trend -->
+    <div class="es-chart-card">
+      <div class="es-chart-header">
+        <h3>⚡ Live Sensor Trend</h3>
+        <div class="es-slicer-row">
+          <label>Equipment:</label>
+          <select id="slicerEquipment" class="es-slicer">
+            <option value="all">All Equipment</option>
+          </select>
+          <label>Metric:</label>
+          <select id="slicerMetric" class="es-slicer">
+            <option value="Temperature">Temperature (°C)</option>
+            <option value="Vibration">Vibration (Hz)</option>
+            <option value="Pressure">Pressure (bar)</option>
+            <option value="Humidity">Humidity (%)</option>
+          </select>
+        </div>
+      </div>
+      <div class="es-chart-body">
+        <canvas id="trendLineChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Gauge-style: Risk Level -->
+    <div class="es-chart-card">
+      <div class="es-chart-header">
+        <h3>Risk Breakdown</h3>
+        <span class="es-chart-tag">Fleet</span>
+      </div>
+      <div class="es-chart-body">
+        <canvas id="riskRadarChart"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Equipment Cards Grid ── -->
+  <div class="es-section">
+    <div class="es-section-header">
+      <h2 class="es-section-title">🏭 Equipment Cards</h2>
+      <div class="es-search-wrap">
+        <input type="text" id="esSearch" class="es-search" placeholder="Search by name, type, location...">
+      </div>
+    </div>
+
+    <div class="es-cards-grid" id="esCardsGrid">
+      <div class="es-empty-state">⏳ Loading equipment data...</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ================================================================
+   EQUIPMENT STATUS PAGE JAVASCRIPT
+   ================================================================ */
+
+let esEquipmentData = [];
+let statusDonutChart, healthBarChart, trendLineChart, riskRadarChart;
+let trendHistory = {};   // { equipmentId: [{time, Temperature, Vibration, ...}] }
+const MAX_TREND_POINTS = 50;
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+function getCondition(eq) {
+  const s = (eq.status || '').toLowerCase();
+  const h = parseFloat(eq.health_score) || 0;
+  if (s === 'critical' || h < 40) return 'critical';
+  if (s === 'warning'  || h < 70) return 'risk';
+  return 'good';
+}
+
+function conditionLabel(c) {
+  return { good: 'Good', risk: 'Risk', critical: 'Critical' }[c] || 'Good';
+}
+
+function conditionColor(c) {
+  return { good: '#00e676', risk: '#ffca28', critical: '#ff5252' }[c] || '#00e676';
+}
+
+function conditionIcon(c) {
+  return { good: '✅', risk: '⚠️', critical: '🚨' }[c] || '✅';
+}
+
+function formatTime() {
+  return new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+// ── Fetch Equipment ──────────────────────────────────────────────
+
+async function fetchEquipment() {
+  try {
+    const resp = await fetch('/dashboard/api/equipment-list');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if (data.success && data.data && data.data.length > 0) {
+      esEquipmentData = data.data;
+      updateAll();
+    } else if (!esEquipmentData.length) {
+      // Data not ready yet - retry once after 500ms
+      setTimeout(fetchEquipment, 500);
+    }
+  } catch (e) {
+    console.warn('Equipment fetch failed:', e);
+    if (!esEquipmentData.length) setTimeout(fetchEquipment, 1000);
+  }
+}
+
+// ── KPI Cards ───────────────────────────────────────────────────
+
+function updateKPIs(list) {
+  const good     = list.filter(e => getCondition(e) === 'good').length;
+  const risk     = list.filter(e => getCondition(e) === 'risk').length;
+  const critical = list.filter(e => getCondition(e) === 'critical').length;
+  document.getElementById('kpiGood').textContent     = good;
+  document.getElementById('kpiRisk').textContent     = risk;
+  document.getElementById('kpiCritical').textContent = critical;
+  document.getElementById('kpiTotal').textContent    = list.length;
+}
+
+// ── Status Donut Chart ───────────────────────────────────────────
+
+function buildDonutChart(list) {
+  const good     = list.filter(e => getCondition(e) === 'good').length;
+  const risk     = list.filter(e => getCondition(e) === 'risk').length;
+  const critical = list.filter(e => getCondition(e) === 'critical').length;
+
+  document.getElementById('donutCenterVal').textContent = list.length;
+
+  const ctx = document.getElementById('statusDonutChart').getContext('2d');
+  if (statusDonutChart) statusDonutChart.destroy();
+
+  statusDonutChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Good', 'Risk', 'Critical'],
+      datasets: [{
+        data: [good, risk, critical],
+        backgroundColor: ['#00e676', '#ffca28', '#ff5252'],
+        borderColor: 'rgba(0,0,0,0.1)',
+        borderWidth: 2,
+        hoverOffset: 8,
+      }]
+    },
+    options: {
+      cutout: '72%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: getComputedStyle(document.body).getPropertyValue('--text-secondary'), font: { size: 12 }, padding: 16 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw}` } }
+      },
+      animation: { animateScale: true, duration: 800 }
+    }
+  });
+}
+
+// ── Health Bar Chart ─────────────────────────────────────────────
+
+function buildHealthBarChart(list) {
+  const typeFilter   = document.getElementById('slicerType').value;
+  const statusFilter = document.getElementById('slicerStatus').value;
+
+  let filtered = list;
+  if (typeFilter !== 'all')   filtered = filtered.filter(e => (e.type || '').toLowerCase() === typeFilter.toLowerCase());
+  if (statusFilter !== 'all') filtered = filtered.filter(e => getCondition(e) === statusFilter);
+
+  if (!filtered.length) {
+    const ctx = document.getElementById('healthBarChart').getContext('2d');
+    if (healthBarChart) healthBarChart.destroy();
+    const chartBody = document.querySelector('.es-chart-card.es-chart-wide .es-chart-body');
+    if (chartBody) {
+      chartBody.innerHTML = '<div class="es-empty-state" style="height:100%;display:flex;align-items:center;justify-content:center;">No equipment matches the selected filters.</div>';
+    }
+    return;
+  }
+
+  const chartBody = document.querySelector('.es-chart-card.es-chart-wide .es-chart-body');
+  if (chartBody && !chartBody.querySelector('canvas#healthBarChart')) {
+    chartBody.innerHTML = '<canvas id="healthBarChart"></canvas>';
+  }
+
+  const labels = filtered.map(e => e.name || e.equipment_id);
+  const scores = filtered.map(e => parseFloat(e.health_score) || 0);
+  const colors = filtered.map(e => conditionColor(getCondition(e)));
+
+  const ctx = document.getElementById('healthBarChart').getContext('2d');
+  if (healthBarChart) healthBarChart.destroy();
+
+  const displayScores = scores.map(score => score <= 0 ? 1 : score);
+
+  healthBarChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Health Score (%)',
+        data: displayScores,
+        backgroundColor: colors.map(c => c + 'bb'),
+        borderColor: colors,
+        borderWidth: 2,
+        borderRadius: 6,
+        minBarLength: 10,
+        barThickness: 32,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { color: getComputedStyle(document.body).getPropertyValue('--text-secondary') }, grid: { color: 'rgba(128,128,128,0.1)' } },
+        y: { min: 0, max: 100, ticks: { color: getComputedStyle(document.body).getPropertyValue('--text-secondary'), callback: v => v + '%' }, grid: { color: 'rgba(128,128,128,0.1)' } }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const actual = scores[ctx.dataIndex] ?? ctx.raw;
+              return ` Health: ${Number(actual).toFixed(1)}%`;
+            }
+          }
+        }
+      },
+      animation: { duration: 600 }
+    }
+  });
+}
+
+// ── Trend Line Chart (real-time streaming) ───────────────────────
+
+function initTrendChart() {
+  const ctx = document.getElementById('trendLineChart').getContext('2d');
+  trendLineChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Temperature (°C)',
+        data: [],
+        borderColor: '#00d4ff',
+        backgroundColor: 'rgba(0,212,255,0.1)',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 3,
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 300 },
+      scales: {
+        x: { ticks: { color: getComputedStyle(document.body).getPropertyValue('--text-secondary'), maxTicksLimit: 8 }, grid: { color: 'rgba(128,128,128,0.1)' } },
+        y: { ticks: { color: getComputedStyle(document.body).getPropertyValue('--text-secondary') }, grid: { color: 'rgba(128,128,128,0.1)' } }
+      },
+      plugins: {
+        legend: { labels: { color: getComputedStyle(document.body).getPropertyValue('--text-secondary') } },
+        tooltip: { mode: 'index', intersect: false }
+      }
+    }
+  });
+}
+
+function pushTrendPoint(equipmentId, sensors) {
+  if (!trendHistory[equipmentId]) trendHistory[equipmentId] = [];
+  trendHistory[equipmentId].push({ time: formatTime(), ...sensors });
+  if (trendHistory[equipmentId].length > MAX_TREND_POINTS)
+    trendHistory[equipmentId].shift();
+}
+
+function updateTrendChart() {
+  if (!trendLineChart) return;
+  const eqId  = document.getElementById('slicerEquipment').value;
+  const metric = document.getElementById('slicerMetric').value;
+
+  let history;
+  if (eqId === 'all') {
+    // Merge all histories using most recent common timestamps
+    const allPoints = Object.values(trendHistory).flat();
+    history = allPoints.slice(-MAX_TREND_POINTS);
+  } else {
+    history = trendHistory[eqId] || [];
+  }
+
+  const labels = history.map(p => p.time);
+  const values = history.map(p => parseFloat(p[metric]) || 0);
+
+  const metricColors = {
+    Temperature: '#ff6b6b',
+    Vibration:   '#ffd93d',
+    Pressure:    '#6bcb77',
+    Humidity:    '#4d96ff',
+  };
+  const col = metricColors[metric] || '#00d4ff';
+
+  trendLineChart.data.labels = labels;
+  trendLineChart.data.datasets[0].label    = metric;
+  trendLineChart.data.datasets[0].data     = values;
+  trendLineChart.data.datasets[0].borderColor     = col;
+  trendLineChart.data.datasets[0].backgroundColor = col + '22';
+  trendLineChart.update('none');
+}
+
+// ── Risk Radar Chart ─────────────────────────────────────────────
+
+function buildRiskRadarChart(list) {
+  const good     = list.filter(e => getCondition(e) === 'good').length;
+  const risk     = list.filter(e => getCondition(e) === 'risk').length;
+  const critical = list.filter(e => getCondition(e) === 'critical').length;
+  const total    = Math.max(list.length, 1);
+
+  const ctx = document.getElementById('riskRadarChart').getContext('2d');
+  if (riskRadarChart) riskRadarChart.destroy();
+
+  riskRadarChart = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: ['Good %', 'Risk %', 'Critical %', 'Fleet Health'],
+      datasets: [{
+        label: 'Fleet Status',
+        data: [
+          Math.round(good / total * 100),
+          Math.round(risk / total * 100),
+          Math.round(critical / total * 100),
+          Math.round(list.reduce((a, e) => a + (parseFloat(e.health_score) || 0), 0) / total),
+        ],
+        borderColor: '#00d4ff',
+        backgroundColor: 'rgba(0,212,255,0.15)',
+        pointBackgroundColor: '#00d4ff',
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        r: {
+          min: 0, max: 100,
+          ticks: { color: getComputedStyle(document.body).getPropertyValue('--text-secondary'), backdropColor: 'transparent', stepSize: 25 },
+          grid: { color: 'rgba(128,128,128,0.15)' },
+          pointLabels: { color: getComputedStyle(document.body).getPropertyValue('--text-secondary'), font: { size: 11 } }
+        }
+      },
+      plugins: { legend: { display: false } },
+      animation: { duration: 700 }
+    }
+  });
+}
+
+// ── Equipment Cards ──────────────────────────────────────────────
+
+function renderEquipmentCards(list) {
+  const grid = document.getElementById('esCardsGrid');
+  const query = (document.getElementById('esSearch').value || '').toLowerCase();
+
+  const filtered = list.filter(e => {
+    if (!query) return true;
+    const text = `${e.name} ${e.type} ${e.location} ${e.equipment_id} ${getCondition(e)}`.toLowerCase();
+    return text.includes(query);
+  });
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="es-empty-state">No equipment found.</div>';
+    return;
+  }
+
+  grid.innerHTML = filtered.map(eq => {
+    const cond  = getCondition(eq);
+    const score = parseFloat(eq.health_score) || 0;
+    const label = conditionLabel(cond);
+    const color = conditionColor(cond);
+    const icon  = conditionIcon(cond);
+
+    return `
+    <div class="es-card es-card-${cond}" data-id="${eq.equipment_id}">
+      <div class="es-card-header">
+        <div>
+          <h4 class="es-card-name">${eq.name || eq.equipment_id}</h4>
+          <p class="es-card-sub">${eq.equipment_id} · ${eq.type || 'Unknown'}</p>
+        </div>
+        <span class="es-badge es-badge-${cond}">${icon} ${label}</span>
+      </div>
+      <div class="es-card-meta">
+        <span>📍 ${eq.location || 'Unknown'}</span>
+        <span>🔩 ${eq.type || 'General'}</span>
+      </div>
+      <div class="es-card-health">
+        <div class="es-health-label">
+          <span>Health Score</span>
+          <strong style="color:${color}">${score.toFixed(1)}%</strong>
+        </div>
+        <div class="es-health-track">
+          <div class="es-health-fill" style="width:${score}%;background:${color};"></div>
+        </div>
+      </div>
+      <div class="es-card-actions">
+        <button class="es-btn es-btn-detail" onclick="esViewDetail('${eq.equipment_id}')">View Details</button>
+        <button class="es-btn es-btn-predict" onclick="esRunPredict('${eq.equipment_id}', this)">Run AI Prediction</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Actions ──────────────────────────────────────────────────────
+
+function esViewDetail(id) {
+  window.location.href = `/dashboard/equipment/${id}`;
+}
+
+async function esRunPredict(equipmentId, btn) {
+  const orig = btn.innerHTML;
+  btn.innerHTML = '⏳ Predicting...';
+  btn.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append('is_failure', 'false');
+    const resp = await fetch(`/dashboard/api/sensor-data/${equipmentId}`, { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (data.success) {
+      // Push to trend
+      pushTrendPoint(equipmentId, data.sensors);
+      updateTrendChart();
+      // Refresh lists
+      await fetchEquipment();
+      showToast(`✅ ${equipmentId}: ${data.prediction}`, 'success');
+    } else {
+      showToast('Prediction failed', 'error');
+    }
+  } catch (e) {
+    showToast('Error contacting server', 'error');
+  } finally {
+    btn.innerHTML = orig;
+    btn.disabled = false;
+  }
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.className = `toast toast-${type} show`;
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ── Update All ───────────────────────────────────────────────────
+
+function updateAll() {
+  const list = esEquipmentData;
+
+  // Populate equipment slicer
+  const sel = document.getElementById('slicerEquipment');
+  const existing = Array.from(sel.options).map(o => o.value);
+  list.forEach(e => {
+    if (!existing.includes(e.equipment_id)) {
+      const opt = document.createElement('option');
+      opt.value = e.equipment_id;
+      opt.textContent = e.name || e.equipment_id;
+      sel.appendChild(opt);
+    }
+  });
+
+  updateKPIs(list);
+  buildDonutChart(list);
+  buildHealthBarChart(list);
+  buildRiskRadarChart(list);
+  renderEquipmentCards(list);
+
+  // Simulate sensor data push for trend
+  list.forEach(eq => {
+    const sim = simulateSensor(eq);
+    pushTrendPoint(eq.equipment_id, sim);
+  });
+  updateTrendChart();
+}
+
+// Lightweight sensor simulator for real-time chart
+function simulateSensor(eq) {
+  const h = parseFloat(eq.health_score) || 75;
+  const factor = h / 100;
+  return {
+    Temperature: parseFloat((65 + (1 - factor) * 25 + (Math.random() - 0.5) * 4).toFixed(2)),
+    Vibration:   parseFloat((0.5 + (1 - factor) * 2.5 + (Math.random() - 0.5) * 0.3).toFixed(3)),
+    Pressure:    parseFloat((30 + (1 - factor) * 30 + (Math.random() - 0.5) * 3).toFixed(2)),
+    Humidity:    parseFloat((35 + (1 - factor) * 40 + (Math.random() - 0.5) * 4).toFixed(2)),
+  };
+}
+
+// ── Real-time polling ────────────────────────────────────────────
+
+function startRealTimeUpdates() {
+  // Full data refresh every 2 s to stay coordinated with other pages
+  setInterval(fetchEquipment, 2000);
+}
+
+// ── Event Listeners ──────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  initTrendChart();
+  // Fetch immediately
+  fetchEquipment();
+  // Start real-time polling
+  startRealTimeUpdates();
+
+  document.getElementById('esRefreshBtn').addEventListener('click', fetchEquipment);
+
+  document.getElementById('esSearch').addEventListener('input', () => renderEquipmentCards(esEquipmentData));
+
+  // When Type or Status slicer changes: rebuild chart AND filter+scroll cards
+  document.getElementById('slicerType').addEventListener('change', () => {
+    buildHealthBarChart(esEquipmentData);
+    applySlicerToCards();
+  });
+  document.getElementById('slicerStatus').addEventListener('change', () => {
+    buildHealthBarChart(esEquipmentData);
+    applySlicerToCards();
+  });
+
+  document.getElementById('slicerEquipment').addEventListener('change', () => {
+    updateTrendChart();
+    const eqId = document.getElementById('slicerEquipment').value;
+    if (eqId && eqId !== 'all') highlightCard(eqId);
+  });
+  document.getElementById('slicerMetric').addEventListener('change', updateTrendChart);
+
+  window.addEventListener('themeChanged', () => {
+    if (esEquipmentData.length) {
+      buildDonutChart(esEquipmentData);
+      buildHealthBarChart(esEquipmentData);
+      buildRiskRadarChart(esEquipmentData);
+      const oldHistory = JSON.parse(JSON.stringify(trendHistory));
+      initTrendChart();
+      trendHistory = oldHistory;
+      updateTrendChart();
+    }
+  });
+});
+
+// ── Slicer → Cards ──────────────────────────────────────────────
+
+function applySlicerToCards() {
+  const typeFilter   = document.getElementById('slicerType').value;
+  const statusFilter = document.getElementById('slicerStatus').value;
+
+  if (typeFilter === 'all' && statusFilter === 'all') {
+    // No filter: just re-render normally
+    renderEquipmentCards(esEquipmentData);
+    return;
+  }
+
+  let filtered = esEquipmentData.slice();
+  if (typeFilter !== 'all')   filtered = filtered.filter(e => (e.type || '').toLowerCase() === typeFilter.toLowerCase());
+  if (statusFilter !== 'all') filtered = filtered.filter(e => getCondition(e) === statusFilter);
+
+  // Put matching cards first, then the rest
+  const nonMatching = esEquipmentData.filter(e => !filtered.includes(e));
+  const sorted = [...filtered, ...nonMatching];
+
+  renderEquipmentCards(sorted);
+
+  // Scroll to first matching card
+  if (filtered.length > 0) {
+    setTimeout(() => {
+      const first = document.querySelector(`[data-id="${filtered[0].equipment_id}"]`);
+      if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  }
+}
+
+// ── Highlight a specific card ────────────────────────────────────
+
+function highlightCard(equipmentId) {
+  // Remove previous highlight
+  document.querySelectorAll('.es-card').forEach(c => c.classList.remove('es-card-selected'));
+  const card = document.querySelector(`[data-id="${equipmentId}"]`);
+  if (card) {
+    card.classList.add('es-card-selected');
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+</script>
+
+<div id="toast" class="toast" aria-live="polite"></div>
+
+{% endblock %}

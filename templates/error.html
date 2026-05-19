@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="container">
+    <h1>Error {{ error_code if error_code else '' }}</h1>
+    <p>{{ message if message else 'An error occurred' }}</p>
+    <a href="/">Return home</a>
+  </div>
+{% endblock %}

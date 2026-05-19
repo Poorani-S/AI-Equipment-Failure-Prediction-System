@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block title %}{{ equipment.equipment_name or equipment.equipment_id }} - Equipment Detail{% endblock %}
+{% block content %}
+<div class="dashboard-container">
+    <div style="margin-bottom:1.5rem;">
+        <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary">← Back to Dashboard</a>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;margin-bottom:2rem;">
+        <div>
+            <span style="display:inline-flex;align-items:center;padding:0.35rem 0.8rem;border-radius:999px;border:1px solid rgba(0,212,255,0.2);color:#00d4ff;font-size:0.72rem;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:0.5rem;">Equipment Profile</span>
+            <h1 style="color:var(--accent-primary);text-transform:uppercase;letter-spacing:2px;margin:0.4rem 0;">{{ equipment.equipment_name or equipment.equipment_id }}</h1>
+            <p style="color:var(--text-secondary);">{{ equipment.equipment_id }} &bull; {{ equipment.equipment_type or 'N/A' }} &bull; {{ equipment.location or 'N/A' }}</p>
+        </div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
+            <span class="status-badge status-{{ equipment.status or 'online' }}">{{ (equipment.status or 'online').upper() }}</span>
+            <button class="btn btn-primary" onclick="runEquipmentPrediction('{{ equipment.equipment_id }}')">🔍 Run AI Prediction</button>
+            <button class="btn btn-secondary" id="downloadReportBtn" onclick="downloadEquipmentReport('{{ equipment.equipment_id }}')">📄 Download Report</button>
+        </div>
+    </div>
+
+    <div class="stats-grid" style="margin-bottom:2rem;">
+        <div class="stat-card">
+            <div class="stat-icon">💚</div>
+            <div class="stat-info">
+                <h3>Health Score</h3>
+                <p class="stat-value" style="color:{% if (equipment.health_score or 0) >= 80 %}var(--success){% elif (equipment.health_score or 0) >= 50 %}var(--warning){% else %}var(--danger){% endif %};">{{ equipment.health_score or 0 }}%</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">📊</div>
+            <div class="stat-info">
+                <h3>Predictions</h3>
+                <p class="stat-value">{{ history|length }}</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">⚠️</div>
+            <div class="stat-info">
+                <h3>Active Alerts</h3>
+                <p class="stat-value" style="color:var(--danger);">{{ alerts|length }}</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">🏭</div>
+            <div class="stat-info">
+                <h3>Equipment Type</h3>
+                <p class="stat-value" style="font-size:1.2rem;">{{ equipment.equipment_type or 'N/A' }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="analytics-section" id="detailIntelSection" style="margin-bottom:2rem;">
+        <div class="analytics-header">
+            <div>
+                <span class="section-eyebrow">AI Intelligence</span>
+                <h2>Forecast, Root Cause, and Maintenance Plan</h2>
+                <p>Live analysis for this machine, refreshed directly from the shared intelligence engine.</p>
+            </div>
+        </div>
+        <div class="analytics-spotlights" style="margin-bottom:1.5rem;">
+            <article class="analytics-spotlight accent">
+                <span>24h Failure Forecast</span>
+                <strong id="detailFailure24h">--</strong>
+                <p>Projected near-term failure probability</p>
+            </article>
+            <article class="analytics-spotlight">
+                <span>7 Day Forecast</span>
+                <strong id="detailFailure7d">--</strong>
+                <p>Projected weekly failure probability</p>
+            </article>
+            <article class="analytics-spotlight">
+                <span>Remaining Life</span>
+                <strong id="detailRemainingLife">--</strong>
+                <p>Estimated degradation window</p>
+            </article>
+        </div>
+        <div class="analytics-body">
+            <div class="analytics-chart-card">
+                <div class="analytics-card-heading">
+                    <h3>Why This Prediction?</h3>
+                    <span id="detailRiskLabel">Loading...</span>
+                </div>
+                <div id="detailExplainability" class="intel-stack">
+                    <div class="distribution-empty">Loading intelligence...</div>
+                </div>
+            </div>
+            <div class="analytics-insight-card">
+                <div class="analytics-card-heading">
+                    <h3>Maintenance Plan</h3>
+                    <span id="detailMaintenanceUrgency">--</span>
+                </div>
+                <div id="detailMaintenance" class="intel-stack">
+                    <div class="distribution-empty">Loading maintenance guidance...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if alerts %}
+    <div class="alerts-section">
+        <h2>⚠️ Active Alerts</h2>
+        <div class="alerts-list">
+            {% for alert in alerts %}
+            <div class="alert-item alert-{{ alert.severity.lower() if alert.severity else 'medium' }}">
+                <div class="alert-icon">🚨</div>
+                <div class="alert-content">
+                    <h4>{{ alert.message }}</h4>
+                    <p>Severity: {{ alert.severity }} | Type: {{ alert.alert_type }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div style="margin-bottom:3rem;">
+        <h2 style="font-size:1.8rem;color:var(--accent-primary);margin-bottom:1.5rem;text-transform:uppercase;letter-spacing:2px;">🎯 Prediction History</h2>
+        {% if history %}
+        <div class="predictions-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Prediction</th>
+                        <th>Risk Level</th>
+                        <th>Probability</th>
+                        <th>Temperature</th>
+                        <th>Vibration</th>
+                        <th>Pressure</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pred in history %}
+                    {% set pred_val = pred.prediction_value if pred.prediction_value is not none else pred.prediction %}
+                    <tr class="{% if pred_val == 1 %}prediction-failure{% endif %}">
+                        <td style="color:var(--text-secondary);font-size:0.85rem;">{{ pred.timestamp }}</td>
+                        <td>
+                            {% if pred_val == 1 %}
+                                <span style="color:var(--danger);">⚠️ Failure</span>
+                            {% else %}
+                                <span style="color:var(--success);">✅ Normal</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set rl = pred.risk_level or 'Low' %}
+                            <span class="risk-{{ rl.lower() }}">{{ rl }}</span>
+                        </td>
+                        <td>{% set prob = pred.failure_probability or pred.probability or 0 %}{{ (prob * 100 if prob <= 1 else prob) | round(1) }}%</td>
+                        <td>{{ pred.temperature or '—' }}</td>
+                        <td>{{ pred.vibration or '—' }}</td>
+                        <td>{{ pred.pressure or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p style="color:var(--text-secondary);text-align:center;padding:3rem;background:var(--bg-tertiary);border-radius:12px;border:2px solid var(--border-color);">
+            No prediction history yet. Click <strong>Run AI Prediction</strong> to start monitoring.
+        </p>
+        {% endif %}
+    </div>
+</div>
+
+<div id="equipPredModal" class="modal">
+    <div class="modal-content" style="max-width:680px;">
+        <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--border-color);padding-bottom:1rem;margin-bottom:1rem;">
+            <h2 style="color:var(--accent-primary);">📊 AI Prediction Results</h2>
+            <button style="background:none;border:none;color:var(--text-secondary);font-size:1.8rem;cursor:pointer;" onclick="document.getElementById('equipPredModal').style.display='none'">×</button>
+        </div>
+        <div id="equipPredResult" style="min-height:100px;"></div>
+        <div style="display:flex;gap:1rem;margin-top:1.5rem;padding-top:1rem;border-top:2px solid var(--border-color);">
+            <button class="btn btn-secondary" onclick="document.getElementById('equipPredModal').style.display='none'">Close</button>
+            <button class="btn btn-primary" id="modalDownloadBtn" onclick="downloadEquipmentReport('{{ equipment.equipment_id }}')">📄 Download Report</button>
+        </div>
+    </div>
+</div>
+
+<script>
+async function runEquipmentPrediction(equipmentId) {
+    const modal = document.getElementById('equipPredModal');
+    const resultDiv = document.getElementById('equipPredResult');
+    resultDiv.innerHTML = '<div style="text-align:center;padding:2rem;"><div class="spinner" style="margin:0 auto;"></div><p style="color:var(--text-secondary);margin-top:1rem;">Running AI prediction...</p></div>';
+    modal.style.display = 'block';
+    try {
+        const formData = new FormData();
+        formData.append('equipment_id', equipmentId);
+        formData.append('is_failure', 'false');
+        const response = await fetch(`/dashboard/api/sensor-data/${equipmentId}`, { method: 'POST', body: formData });
+        if (!response.ok) throw new Error('Prediction request failed');
+        const data = await response.json();
+        if (data.success) {
+            const riskColor = data.risk_color || '#b0b9d4';
+            const healthColor = data.health_score >= 80 ? '#00ff88' : data.health_score >= 50 ? '#ffaa00' : '#ff3333';
+            resultDiv.innerHTML = `
+                <div style="background:rgba(36,43,72,0.5);padding:1rem;border-radius:8px;border-left:4px solid ${riskColor};margin-bottom:1rem;">
+                    <p style="font-size:1.2rem;color:${riskColor};font-weight:700;margin:0 0 0.4rem;">${data.prediction}</p>
+                    <p style="color:var(--text-secondary);margin:0.2rem 0;">Confidence: <strong style="color:var(--text-primary);">${data.failure_probability.toFixed(1)}%</strong></p>
+                    <p style="color:var(--text-secondary);margin:0.2rem 0;">Risk Level: <strong style="color:${riskColor};">${data.risk_level}</strong></p>
+                    <p style="color:var(--text-secondary);margin:0.2rem 0;">Health Score: <strong style="color:${healthColor};">${data.health_score.toFixed(1)}%</strong> (${data.health_status})</p>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:1rem;">
+                    ${['Temperature','Vibration','Pressure','Humidity'].map(k => `
+                    <div style="background:rgba(36,43,72,0.5);padding:0.7rem;border-radius:6px;">
+                        <p style="color:var(--text-secondary);font-size:0.82rem;margin:0;">${k}</p>
+                        <p style="color:#00d4ff;font-weight:700;margin:0.2rem 0 0;">${(data.sensors[k]||0).toFixed(2)}</p>
+                    </div>`).join('')}
+                </div>
+                ${data.recommendations && data.recommendations.length ? `
+                <h4 style="color:var(--accent-primary);margin:0 0 0.5rem;">🔧 Recommendations</h4>
+                <ul style="padding-left:1.4rem;margin:0;">${data.recommendations.map(r=>`<li style="color:var(--text-secondary);margin-bottom:0.3rem;">${r.message}</li>`).join('')}</ul>` : ''}`;
+            setTimeout(() => location.reload(), 4000);
+        } else {
+            resultDiv.innerHTML = `<p style="color:var(--danger);">❌ ${data.error || 'Prediction failed'}</p>`;
+        }
+    } catch(e) {
+        resultDiv.innerHTML = `<p style="color:var(--danger);">❌ ${e.message}</p>`;
+    }
+}
+
+async function downloadEquipmentReport(equipmentId) {
+    const btn = document.getElementById('downloadReportBtn');
+    const modalBtn = document.getElementById('modalDownloadBtn');
+    [btn, modalBtn].forEach(b => { if(b) { b.textContent = '⏳ Generating...'; b.disabled = true; }});
+    try {
+        window.location.href = `/dashboard/api/report/equipment/${equipmentId}`;
+    } finally {
+        setTimeout(() => {
+            [btn, modalBtn].forEach(b => { if(b) { b.innerHTML = '📄 Download Report'; b.disabled = false; }});
+        }, 3000);
+    }
+}
+
+async function loadEquipmentIntelligence(equipmentId) {
+    try {
+        const response = await fetch(`/dashboard/api/intelligence/${equipmentId}`);
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (!payload.success) return;
+        const data = payload.data || {};
+
+        const failure24h = document.getElementById('detailFailure24h');
+        const failure7d = document.getElementById('detailFailure7d');
+        const remainingLife = document.getElementById('detailRemainingLife');
+        const riskLabel = document.getElementById('detailRiskLabel');
+        const explainability = document.getElementById('detailExplainability');
+        const maintenance = document.getElementById('detailMaintenance');
+        const maintenanceUrgency = document.getElementById('detailMaintenanceUrgency');
+
+        if (failure24h) failure24h.textContent = `${data.forecast?.failure_24h ?? '--'}%`;
+        if (failure7d) failure7d.textContent = `${data.forecast?.failure_7d ?? '--'}%`;
+        if (remainingLife) remainingLife.textContent = `${data.forecast?.estimated_remaining_life_days ?? '--'}d`;
+        if (riskLabel) riskLabel.textContent = data.risk_level ? `${data.risk_level} risk` : 'Fleet intelligence';
+        if (maintenanceUrgency) maintenanceUrgency.textContent = data.maintenance?.urgency || '--';
+
+        if (explainability) {
+            explainability.innerHTML = `
+                <div class="intel-card">
+                    <strong>${data.equipment_name || equipmentId}</strong>
+                    <p>${data.root_cause?.summary || 'No root cause data available.'}</p>
+                    <p><b>Probable root cause:</b> ${data.root_cause?.cause || 'Unknown'}</p>
+                    <p><b>Subsystem:</b> ${data.root_cause?.subsystem || 'General'}</p>
+                </div>
+                <div class="intel-card">
+                    <strong>Sensor Contributions</strong>
+                    ${(data.sensor_contributions || []).map(item => `<div class="intel-metric"><span>${item.sensor}</span><span>${item.contribution_pct}%</span></div>`).join('') || '<div class="distribution-empty">No sensor deviations detected.</div>'}
+                </div>`;
+        }
+
+        if (maintenance) {
+            maintenance.innerHTML = `
+                <div class="intel-card">
+                    <strong>${data.maintenance?.urgency || 'Low'} Priority</strong>
+                    <p>${data.maintenance?.timeline_summary || 'Routine maintenance recommended.'}</p>
+                    <p><b>Recommended action:</b> ${data.maintenance?.recommended_action || 'Inspect machine'}</p>
+                    <p><b>Severity:</b> ${data.maintenance?.estimated_severity || 'Low'}</p>
+                </div>
+                ${(data.maintenance?.recommendations || []).map(item => `<div class="intel-metric"><span>${item.message}</span><span>${item.priority}</span></div>`).join('')}`;
+        }
+    } catch (error) {
+        console.warn('Failed to load equipment intelligence:', error);
+    }
+}
+
+loadEquipmentIntelligence('{{ equipment.equipment_id }}');
+</script>
+{% endblock %}

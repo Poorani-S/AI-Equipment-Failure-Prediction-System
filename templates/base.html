@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Equipment Prediction System{% endblock %}</title>
+    <script>
+        (function () {
+            try {
+                var savedTheme = window.localStorage.getItem('ai-equipment-theme') || 'dark';
+                document.documentElement.setAttribute('data-theme', savedTheme);
+            } catch (e) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=3.0">
+    {% block extra_css %}{% endblock %}
+</head>
+<body data-theme="dark">
+    <!-- Global Navigation -->
+    <nav class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">
+                <a href="{{ url_for('home') }}" class="brand-link">
+                    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Fixie AI Logo" class="nav-logo-bounce">
+                    Fixie AI
+                </a>
+            </div>
+
+            <!-- Hamburger Button (Mobile) -->
+            <button class="burger-button" id="globalBurger" aria-label="Toggle Navigation">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+
+            <ul class="navbar-menu" id="navbarMenu">
+                <li><a href="{{ url_for('home') }}">Home</a></li>
+                {% if session.user_id %}
+                    <li><a href="{{ url_for('dashboard.index') }}">Equipment Status</a></li>
+                    <li><a href="{{ url_for('dashboard.equipment_status') }}">Dashboard</a></li>
+                    {% if session.role == 'admin' %}
+                    <li><a href="{{ url_for('admin.dashboard') }}">Admin Panel</a></li>
+                    {% endif %}
+                    <li class="user-info">
+                        👤 {{ session.username }}
+                        <a href="{{ url_for('auth.logout') }}" class="logout-btn">Logout</a>
+                    </li>
+                {% else %}
+                    <li><a href="{{ url_for('auth.login') }}">Login</a></li>
+                    <li><a href="{{ url_for('auth.signup') }}" class="btn-signup">Sign Up</a></li>
+                {% endif %}
+                <li class="theme-toggle-li">
+                    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Toggle Theme">
+                        <div class="theme-toggle-icons">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></svg>
+                        </div>
+                        <div class="theme-toggle-thumb">
+                            <svg class="thumb-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+                        </div>
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    {{ message }}
+                    <button class="close" onclick="this.parentElement.style.display='none';">&times;</button>
+                </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <div id="toast" class="toast"></div>
+
+    <footer class="footer">
+        <p>&copy; 2026 AI-Powered Equipment Monitoring | <a href="#">Terms</a> | <a href="#">Privacy</a></p>
+    </footer>
+
+    <!-- Global Assets -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="{{ url_for('static', filename='js/theme-effects.js') }}?v=1.1"></script>
+    <script src="{{ url_for('static', filename='js/base.js') }}?v=3.0"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

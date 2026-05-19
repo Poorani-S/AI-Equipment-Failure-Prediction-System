@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Equipment Status - Monitoring{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=3.1">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/enhanced-ui.css') }}?v=1.0">
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Header -->
+    <div class="dashboard-header">
+        <div>
+            <h1>🏭 Equipment Status</h1>
+            <p>Real-time AI-powered failure prediction and maintenance scheduling</p>
+        </div>
+        <div class="header-controls">
+            <input type="text" id="searchEquipment" placeholder="Search equipment..." class="search-input">
+            <button class="btn btn-secondary" type="button" id="searchEquipmentButton">Search</button>
+            <button class="btn btn-primary" type="button" id="refreshEquipmentButton">Refresh</button>
+            <button class="btn btn-danger" type="button" id="deleteAllEquipmentButton">Delete All Data</button>
+        </div>
+    </div>
+
+
+    <!-- Analytics Section -->
+    <section class="analytics-section" id="analyticsPanel">
+        <div class="analytics-header">
+            <div>
+                <span class="section-eyebrow">Decision Intelligence</span>
+                <h2>Operational Insights</h2>
+                <p>Track health, failure risk, and equipment distribution in one place.</p>
+            </div>
+            <button class="btn btn-primary" type="button" id="refreshInsightsButton">Refresh Insights</button>
+        </div>
+
+        <div class="analytics-spotlights">
+            <article class="analytics-spotlight accent">
+                <span>Failure Rate</span>
+                <strong id="analyticsFailureRate">--</strong>
+                <p id="analyticsFailureNote">Waiting for analytics data</p>
+            </article>
+            <article class="analytics-spotlight">
+                <span>Average Health</span>
+                <strong id="analyticsHealthScore">--</strong>
+                <p id="analyticsHealthNote">Health score across active assets</p>
+            </article>
+            <article class="analytics-spotlight">
+                <span>Good Equipment</span>
+                <strong id="analyticsOnlineRate">--</strong>
+                <p id="analyticsOnlineNote">Operational units currently healthy</p>
+            </article>
+        </div>
+
+        <div class="analytics-body">
+            <div class="analytics-chart-card">
+                <div class="analytics-card-heading">
+                    <h3>Equipment Status Distribution</h3>
+                    <span id="analyticsEquipmentTotal">0 assets</span>
+                </div>
+                <div id="analyticsDistributionBars" class="distribution-bars">
+                    <div class="distribution-empty">Loading insights...</div>
+                </div>
+            </div>
+
+            <div class="analytics-insight-card">
+                <div class="analytics-card-heading">
+                    <h3>Insight Summary</h3>
+                </div>
+                <ul id="analyticsInsightList" class="insight-list">
+                    <li>Loading analytics...</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <section class="analytics-section ai-intel-section" id="aiIntelPanel">
+        <div class="analytics-header">
+            <div>
+                <span class="section-eyebrow">AI Intelligence</span>
+                <h2>Forecast, Explainability, and Maintenance</h2>
+                <p>Enterprise insight layer with prediction timelines, root cause analysis, and smart maintenance guidance.</p>
+            </div>
+            <button class="btn btn-primary" type="button" id="refreshIntelButton">Refresh AI Insights</button>
+        </div>
+
+        <div class="analytics-spotlights">
+            <article class="analytics-spotlight accent">
+                <span>24h Failure Forecast</span>
+                <strong id="intel24hFailure">--</strong>
+                <p id="intel24hNote">Awaiting intelligence data</p>
+            </article>
+            <article class="analytics-spotlight">
+                <span>7 Day Forecast</span>
+                <strong id="intel7dFailure">--</strong>
+                <p id="intel7dNote">Awaiting intelligence data</p>
+            </article>
+            <article class="analytics-spotlight">
+                <span>Remaining Life</span>
+                <strong id="intelRemainingLife">--</strong>
+                <p id="intelLifeNote">Estimated degradation timeline</p>
+            </article>
+        </div>
+
+        <div class="analytics-body">
+            <div class="analytics-chart-card">
+                <div class="analytics-card-heading">
+                    <h3>Why This Prediction?</h3>
+                    <span id="intelRiskLabel">No equipment selected</span>
+                </div>
+                <div id="intelExplainability" class="intel-stack">
+                    <div class="distribution-empty">Loading explainability data...</div>
+                </div>
+            </div>
+
+            <div class="analytics-insight-card">
+                <div class="analytics-card-heading">
+                    <h3>Smart Maintenance</h3>
+                    <span id="intelMaintenanceUrgency">--</span>
+                </div>
+                <div id="intelMaintenance" class="intel-stack">
+                    <div class="distribution-empty">Loading maintenance recommendations...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="analytics-body" style="margin-top:1.5rem;">
+            <div class="analytics-chart-card">
+                <div class="analytics-card-heading">
+                    <h3>Fleet Heatmap</h3>
+                    <span>Live</span>
+                </div>
+                <div id="fleetHeatmap" class="heatmap-grid"></div>
+            </div>
+
+            <div class="analytics-insight-card">
+                <div class="analytics-card-heading">
+                    <h3>Live Activity Feed</h3>
+                </div>
+                <div id="liveActivityFeed" class="intel-stack">
+                    <div class="distribution-empty">Loading live activity...</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- Equipment Grid -->
+    <div class="equipment-section">
+        <h2>🏭 Equipment Status</h2>
+        <div class="dashboard-grid" id="equipment-grid">
+            <div class="loading-state">
+                <p>⏳ Loading equipment data...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Prediction Modal -->
+<div id="predictionModal" class="modal">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2>📊 Prediction Results</h2>
+            <button class="modal-close" onclick="closePredictionModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="predictionResult" class="prediction-detail">
+                <p class="loading">⏳ Loading prediction...</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closePredictionModal()">Close</button>
+            <button class="btn btn-primary" onclick="downloadPredictionReport()">📄 Download Report</button>
+        </div>
+    </div>
+</div>
+
+<!-- Equipment Detail Modal -->
+<div id="equipmentDetailModal" class="modal">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2>Equipment Details</h2>
+            <button class="modal-close" onclick="closeEquipmentModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="equipmentDetail" class="equipment-detail">
+                <p class="loading">⏳ Loading equipment details...</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeEquipmentModal()">Close</button>
+            <button class="btn btn-primary" onclick="downloadEquipmentReport()">📄 Download Report</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function closePredictionModal() {
+        document.getElementById('predictionModal').style.display = 'none';
+    }
+    function closeEquipmentModal() {
+        document.getElementById('equipmentDetailModal').style.display = 'none';
+    }
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/dashboard.js"></script>
+<script src="/static/js/enhanced-ui.js"></script>
+{% endblock %}
