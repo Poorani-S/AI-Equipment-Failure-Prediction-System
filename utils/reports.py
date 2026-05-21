@@ -10,6 +10,9 @@ from datetime import datetime
 from io import BytesIO
 import os
 
+# Path to the project logo used in report headers
+LOGO_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'static', 'img', 'logo.png'))
+
 class PDFReportGenerator:
     """Generate professional PDF reports for equipment monitoring and predictions"""
 
@@ -50,6 +53,17 @@ class PDFReportGenerator:
             fontSize=10,
             textColor=colors.HexColor('#e8eaf6'),
             spaceAfter=8
+        ))
+
+        # Header title style (left aligned so it sits beside the logo)
+        self.styles.add(ParagraphStyle(
+            name='HeaderTitle',
+            parent=self.styles['Heading1'],
+            fontSize=20,
+            textColor=colors.HexColor('#00d4ff'),
+            spaceAfter=0,
+            alignment=0,
+            fontName='Helvetica-Bold'
         ))
 
     def generate_equipment_report(self, equipment_data, predictions_data, recommendations):
@@ -118,9 +132,9 @@ class PDFReportGenerator:
 
         story = []
 
-        # Title
-        story.append(Paragraph('Maintenance Schedule Report', self.styles['CustomTitle']))
-        story.append(Paragraph(f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', self.styles['CustomNormal']))
+        # Header (logo + title on same line)
+        story.append(self._create_header('Maintenance Schedule Report'))
+        story.append(Spacer(1, 0.2*inch))
         story.append(Spacer(1, 0.3*inch))
 
         # Maintenance table
@@ -131,12 +145,41 @@ class PDFReportGenerator:
         buffer.seek(0)
         return buffer
 
-    def _create_header(self):
-        """Create report header"""
-        return Paragraph(
-            f'Equipment Monitoring Report<br/><font size=10>Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</font>',
-            self.styles['CustomTitle']
-        )
+    def _create_header(self, title: str = None):
+        """Create report header with logo and title placed on the same line.
+
+        Args:
+            title: Optional custom title to display. If not provided, defaults
+                   to 'Equipment Monitoring Report'.
+        """
+        if title is None:
+            title_text = f'Equipment Monitoring Report<br/><font size=10>Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</font>'
+        else:
+            title_text = f'{title}<br/><font size=10>Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</font>'
+
+        # Prepare image flowable if logo exists
+        if os.path.exists(LOGO_PATH):
+            try:
+                logo = Image(LOGO_PATH, width=0.7*inch, height=0.7*inch)
+            except Exception:
+                logo = Spacer(0.7*inch, 0.7*inch)
+        else:
+            logo = Spacer(0.7*inch, 0.7*inch)
+
+        title_para = Paragraph(title_text, self.styles['HeaderTitle'])
+
+        # Table with two columns: logo + title (keeps them on the same line)
+        content_width = self.width - (0.75*2*inch)  # approximate content width (page width - horizontal margins)
+        table = Table([[logo, title_para]], colWidths=[0.8*inch, content_width - 0.8*inch])
+        table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (1, 0), (1, 0), 'LEFT'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+
+        return table
 
     def _create_equipment_info_table(self, equipment_data):
         """Create equipment information table"""
