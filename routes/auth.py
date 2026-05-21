@@ -9,6 +9,7 @@ from utils.auth import (
     PasswordValidator,
     EmailValidator,
     UsernameValidator,
+    get_safe_redirect_target,
 )
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -17,19 +18,9 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     """User login route."""
-    if AuthenticationManager.is_user_logged_in():
-        return redirect(url_for("home"))
-
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-
-        # Local verification fallback: keep the documented demo credentials usable
-        # even when the database is unavailable.
-        if username == "admin" and password == "Admin@123":
-            AuthenticationManager.set_user_session("demo-admin", "admin", "admin")
-            flash("Welcome back, admin!", "success")
-            return redirect(url_for("home"))
         
         # Validate input
         if not username or not password:
@@ -57,7 +48,7 @@ def login():
         user_id = str(user.get("_id"))
         AuthenticationManager.set_user_session(user_id, username, user.get("role", "operator"))
         flash(f"Welcome back, {username}!", "success")
-        return redirect(url_for("home"))
+        return redirect(get_safe_redirect_target())
     
     return render_template("auth/login.html")
 
@@ -110,28 +101,22 @@ def signup():
         try:
             password_hash = AuthenticationManager.hash_password(password)
             user_id = User.create_user(username, email, password_hash, role="operator")
-            
-            # Automatically log in the user after signup
-            AuthenticationManager.set_user_session(str(user_id), username, "operator")
-            
             flash(
-                f"Welcome aboard, {username}! Account created successfully.",
+                f"Welcome aboard, {username}! Account created successfully. Please log in.",
                 "success",
             )
-            return redirect(url_for("home"))
+            return redirect(url_for("auth.login"))
         except Exception as e:
             # Fallback: if database is not available, create a session-based account
             # This allows testing the signup flow without a working database
             try:
                 import uuid
                 temp_user_id = str(uuid.uuid4())
-                AuthenticationManager.set_user_session(temp_user_id, username, "operator")
-                
                 flash(
-                    f"Welcome aboard, {username}! Account created (temporary session).",
+                    f"Welcome aboard, {username}! Account created (temporary session). Please log in.",
                     "success",
                 )
-                return redirect(url_for("home"))
+                return redirect(url_for("auth.login"))
             except Exception as fallback_error:
                 flash(f"Error creating account: {str(fallback_error)}", "danger")
                 return redirect(url_for("auth.signup"))

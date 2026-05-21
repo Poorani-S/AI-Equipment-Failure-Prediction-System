@@ -19,6 +19,7 @@ from model import (
 )
 from database.models import Prediction, db as mongo_db
 from utils.prediction_state import sync_equipment_state
+from utils.auth import login_required
 
 DATASET_PATH = os.path.join(BASE_DIR, DEFAULT_DATASET_PATH)
 MODEL_PATH = os.path.join(BASE_DIR, DEFAULT_MODEL_PATH)
@@ -26,6 +27,7 @@ MODEL_PATH = os.path.join(BASE_DIR, DEFAULT_MODEL_PATH)
 app = Flask(__name__)
 # Ensure a secret key exists for session handling
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
+app.config["AUTH_SESSION_VERSION"] = os.urandom(16).hex()
 
 # Clean SMTP credentials (strip accidental spaces)
 _mail_username = (os.getenv("MAIL_USERNAME") or "").strip()
@@ -117,29 +119,33 @@ predictions_collection = get_predictions_collection()
 
 print("\n" + "="*40)
 if mongo_db is not None:
-    print("✅ MongoDB Status: Connected Successfully")
+    print("MongoDB Status: Connected Successfully")
 else:
-    print("❌ MongoDB Status: Disconnected (Using local fallback)")
+    print("MongoDB Status: Disconnected (Using local fallback)")
 print("="*40 + "\n")
 
 
 @app.route("/")
 def index():
-    # Render home directly at the root URL
-    return render_template("index.html", feature_columns=FEATURE_COLUMNS)
+    # Always send visitors to the login page first.
+    return redirect(url_for("login_page"))
+
+
+@app.route("/login")
+def login_page():
+    return redirect(url_for("auth.login", **request.args))
 
 
 @app.route("/home")
+@login_required
 def home():
     # Redirect legacy /home to root URL
     return redirect(url_for("index"))
 
 
 @app.route("/predict", methods=["POST"])
+@login_required
 def predict():
-    if not session.get("user_id"):
-        return jsonify({"success": False, "error": "Authentication required. Please Login or Sign Up to run predictions."}), 401
-        
     try:
         from database.models import Equipment, Prediction
         from utils.monitoring import RiskLevelCalculator

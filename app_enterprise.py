@@ -35,6 +35,7 @@ app = Flask(__name__)
 
 # Configuration
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production-12345!")
+app.config["AUTH_SESSION_VERSION"] = os.urandom(16).hex()
 app.config["SESSION_COOKIE_SECURE"] = False  # Set to True in production with HTTPS
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -108,10 +109,13 @@ def _list_routes():
 # Routes
 @app.route("/")
 def index():
-    """Open on login for guests and on the home page after authentication."""
-    if not AuthenticationManager.is_user_logged_in():
-        return redirect(url_for("auth.login"))
-    return redirect(url_for("home"))
+    """Always send visitors to the login page first."""
+    return redirect(url_for("auth.login"))
+
+
+@app.route("/login")
+def login_page():
+    return redirect(url_for("auth.login", **request.args))
 
 
 @app.route("/home")

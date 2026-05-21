@@ -5,7 +5,9 @@ Handles password hashing, validation, and user sessions.
 
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
-from flask import session, redirect, url_for, flash
+from urllib.parse import urljoin, urlparse
+
+from flask import session, redirect, url_for, flash, request, current_app
 import re
 
 
@@ -60,6 +62,7 @@ class AuthenticationManager:
         session["user_id"] = user_id
         session["username"] = username
         session["role"] = role
+        session["auth_version"] = current_app.config.get("AUTH_SESSION_VERSION")
         session.permanent = True
     
     @staticmethod
@@ -70,11 +73,17 @@ class AuthenticationManager:
     @staticmethod
     def is_user_logged_in() -> bool:
         """Check if a user is currently logged in."""
-        return "user_id" in session
+        current_version = current_app.config.get("AUTH_SESSION_VERSION") if current_app else None
+        return (
+            "user_id" in session
+            and session.get("auth_version") == current_version
+        )
     
     @staticmethod
     def get_current_user() -> dict:
         """Get the current logged-in user information."""
+        if not AuthenticationManager.is_user_logged_in():
+            return {"user_id": None, "username": None, "role": None}
         return {
             "user_id": session.get("user_id"),
             "username": session.get("username"),
@@ -88,7 +97,13 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         if not AuthenticationManager.is_user_logged_in():
             flash("Please log in to access this page.", "warning")
-            return redirect(url_for("auth.login"))
+            if request.method in {"GET", "HEAD"}:
+                next_url = request.full_path if request.query_string else request.path
+                if next_url.endswith("?"):
+                    next_url = next_url[:-1]
+                session["post_login_next"] = next_url
+                return redirect(url_for("login_page", next=next_url))
+            return redirect(url_for("login_page"))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -99,15 +114,32 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if not AuthenticationManager.is_user_logged_in():
             flash("Please log in to access this page.", "warning")
-            return redirect(url_for("auth.login"))
+            if request.method in {"GET", "HEAD"}:
+                next_url = request.full_path if request.query_string else request.path
+                if next_url.endswith("?"):
+                    next_url = next_url[:-1]
+                return redirect(url_for("login_page", next=next_url))
+            return redirect(url_for("login_page"))
         
         current_user = AuthenticationManager.get_current_user()
         if current_user.get("role") != "admin":
             flash("You do not have permission to access this page.", "danger")
-            return redirect(url_for("dashboard.index"))
+            return redirect(url_for("login_page"))
         
         return f(*args, **kwargs)
     return decorated_function
+
+
+def get_safe_redirect_target(default_endpoint: str = "home") -> str:
+    """Return a safe redirect target from the incoming request or a fallback endpoint."""
+    target = request.values.get("next", "").strip() or session.pop("post_login_next", "")
+    if target:
+        parsed_target = urlparse(urljoin(request.host_url, target))
+        parsed_host = urlparse(request.host_url)
+        if parsed_target.scheme in {"http", "https"} and parsed_target.netloc == parsed_host.netloc:
+            return target
+
+    return url_for(default_endpoint)
 
 
 class EmailValidator:
