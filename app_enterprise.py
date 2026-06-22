@@ -136,6 +136,9 @@ def predict():
         incoming_data = request.get_json(silent=True) or request.form.to_dict()
         sensor_values = {}
         for column in FEATURE_COLUMNS:
+            if column == "Equipment Type":
+                sensor_values[column] = incoming_data.get("equipment_type") or incoming_data.get("Equipment Type") or "Turbine"
+                continue
             if column not in incoming_data or incoming_data[column] in (None, ""):
                 raise ValueError(f"Missing required field: {column}")
             sensor_values[column] = float(incoming_data[column])

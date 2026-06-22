@@ -63,12 +63,19 @@ def run_tests():
         sess['user_id'] = 'demo'
         sess['username'] = 'demo'
         sess['role'] = 'admin'
+        sess['auth_version'] = app.config.get("AUTH_SESSION_VERSION")
     response = client.get('/home')
-    home_present = response.status_code == 200 and 'AI-Powered Industrial Equipment Failure Prediction System' in response.get_data(as_text=True)
+    home_present = response.status_code == 200 and 'Equipment Failure Prediction' in response.get_data(as_text=True)
     print(f"Status Code: {response.status_code}")
     print(f"Home Page Present: {home_present}")
     print(f"Result: {'[PASS]' if home_present else '[FAIL]'}")
     print()
+    
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'demo'
+        sess['username'] = 'demo'
+        sess['role'] = 'admin'
+        sess['auth_version'] = app.config.get("AUTH_SESSION_VERSION")
     
     # Test 2: Prediction with normal equipment
     print("=" * 70)

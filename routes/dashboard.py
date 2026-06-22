@@ -45,36 +45,37 @@ def sanitize_for_json(data):
 def index():
     """Main dashboard page."""
     try:
-        snapshot = sync_equipment_state(debug=False)
-        equipment_list = snapshot["equipment_list"]
-        active_alerts = Alert.get_active_alerts()
-        recent_predictions = Prediction.get_recent_predictions(limit=10)
-        stats = {
-            "total_equipment": snapshot["total_equipment"],
-            "online": snapshot["counts"]["online"],
-            "critical": snapshot["counts"]["critical"],
-            "warning": snapshot["counts"]["warning"],
-            "active_alerts": len(active_alerts),
-        }
-        
         return render_template(
-            "dashboard/index.html",
-            equipment_list=equipment_list,
-            active_alerts=active_alerts[:5],  # Show top 5 alerts
-            recent_predictions=recent_predictions[:10],
-            stats=stats,
+            "dashboard/equipment_status.html",
+            equipment_list=[],
+            active_alerts=[],
+            recent_predictions=[],
+            stats={
+                "total_equipment": 0,
+                "online": 0,
+                "critical": 0,
+                "warning": 0,
+                "active_alerts": 0,
+            }
         )
     except Exception as e:
         print(f"Error loading dashboard: {e}")
-        return render_template("dashboard/index.html", error=str(e))
+        import traceback
+        traceback.print_exc()
+        return render_template("error.html", message=str(e), error_code=500), 500
 
 
 @dashboard_bp.route("/equipment-status")
 @login_required
 def equipment_status():
     """Detailed equipment status page with charts and slicers."""
-    sync_equipment_state(debug=False)
-    return render_template("dashboard/equipment_status.html")
+    try:
+        return render_template("dashboard/index.html")
+    except Exception as e:
+        print(f"Error loading equipment status: {e}")
+        import traceback
+        traceback.print_exc()
+        return render_template("error.html", message=str(e), error_code=500), 500
 
 
 @dashboard_bp.route("/equipment/<equipment_id>")

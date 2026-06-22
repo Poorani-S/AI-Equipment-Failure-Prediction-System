@@ -46,7 +46,14 @@ class AIChatAssistant:
             return AIChatAssistant._provide_help()
 
         # Fallback
-        return AIChatAssistant._general_response(user_message)
+        return AIChatAssistant._with_suggestions(
+            AIChatAssistant._general_response(user_message),
+            [
+                "Ask for fleet health: 'What's the overall fleet health?'",
+                "Analyze a specific machine: 'Why is Turbine A critical?'",
+                "Get maintenance steps: 'Recommend maintenance for Pump B'",
+            ],
+        )
 
     @staticmethod
     def _explain_failure(msg: str, context: Dict) -> str:
@@ -78,7 +85,14 @@ class AIChatAssistant:
 **Recommendation:**
 Immediate inspection required. {intel.get('maintenance', {}).get('timeline_summary', 'Schedule maintenance within 4 hours.')}
 """
-            return response
+            return AIChatAssistant._with_suggestions(
+                response,
+                [
+                    f"View recent predictions for {equipment}",
+                    "Request a maintenance plan: 'Recommend maintenance'",
+                    "Run a sensor snapshot for deeper diagnostics",
+                ],
+            )
         except Exception as e:
             return f"Unable to analyze equipment: {str(e)}"
 
@@ -95,20 +109,22 @@ Immediate inspection required. {intel.get('maintenance', {}).get('timeline_summa
 
             avg_health = sum(eq["health_score"] for eq in fleet) / len(fleet) if fleet else 0
 
-            return f"""**Fleet Health Status**
+            core = (
+                f"Fleet Health: {avg_health:.1f}% average. "
+                f"Online: {online_count}, Warning: {warning_count}, Critical: {critical_count}."
+            )
 
-📊 **Overall:** {avg_health:.1f}% average health
+            action = (
+                "Continue routine monitoring." if critical_count == 0 else f"Address {critical_count} critical equipment immediately."
+            )
 
-🟢 Online: {online_count} equipment
-🟡 Warning: {warning_count} equipment  
-🔴 Critical: {critical_count} equipment
-
-**Key Insight:**
-Fleet is {"stable" if avg_health > 70 else "degrading" if avg_health > 40 else "critical"}.
-
-**Action:**
-{"✅ Continue routine monitoring" if critical_count == 0 else f"⚠️ Address {critical_count} critical equipment immediately"}
-"""
+            return AIChatAssistant._with_suggestions(
+                f"{core}\nKey insight: Fleet is {'stable' if avg_health > 70 else 'degrading' if avg_health > 40 else 'critical'}.\nAction: {action}",
+                [
+                    "Show critical equipment list",
+                    "Request maintenance recommendations",
+                ],
+            )
         except Exception as e:
             return f"Unable to retrieve fleet health: {str(e)}"
 
@@ -125,26 +141,28 @@ Fleet is {"stable" if avg_health > 70 else "degrading" if avg_health > 40 else "
                 critical_equipment = [eq for eq in snapshot["rows"] if eq["status"] == "critical"][:3]
 
                 if not critical_equipment:
-                    return "✅ All equipment is operating normally. Continue scheduled maintenance as planned."
+                    return AIChatAssistant._with_suggestions(
+                        "All equipment is operating normally. Continue scheduled maintenance as planned.",
+                        ["Create a maintenance task", "View upcoming maintenance calendar"],
+                    )
 
-                response = "**Maintenance Recommendations**\n\n"
+                response = "Maintenance Recommendations:\n\n"
                 for eq in critical_equipment:
                     response += f"**{eq['equipment'].get('equipment_name', eq['equipment_id'])}** (Critical)\n"
                     response += f"- Health: {eq['health_score']}%\n"
                     response += f"- Action: Inspect immediately\n\n"
-                return response
+                return AIChatAssistant._with_suggestions(response, ["Open equipment detail", "Schedule inspection"])
             else:
                 intel = build_equipment_intelligence(equipment_id)
                 maint = intel.get("maintenance", {})
-                return f"""**Maintenance Plan for {intel.get('equipment_name', equipment_id)}**
-
-**Urgency:** {maint.get('urgency', 'Medium')}
-**Timeline:** {maint.get('timeline_summary', 'Schedule within 24 hours')}
-**Action:** {maint.get('recommended_action', 'Perform routine inspection')}
-
-**Recommendations:**
-{chr(10).join([f"- {r.get('message', 'Unknown')} (Priority: {r.get('priority', 'Medium')})" for r in maint.get('recommendations', [])[:3]])}
-"""
+                details = (
+                    f"Maintenance Plan for {intel.get('equipment_name', equipment_id)}:\n"
+                    f"Urgency: {maint.get('urgency', 'Medium')}\n"
+                    f"Timeline: {maint.get('timeline_summary', 'Schedule within 24 hours')}\n"
+                    f"Action: {maint.get('recommended_action', 'Perform routine inspection')}\n"
+                    "Recommendations:\n" + "\n".join([f"- {r.get('message', 'Unknown')} (Priority: {r.get('priority', 'Medium')})" for r in maint.get('recommendations', [])[:3]])
+                )
+                return AIChatAssistant._with_suggestions(details, ["Create maintenance ticket", "Assign technician"])
         except Exception as e:
             return f"Cannot generate maintenance recommendations: {str(e)}"
 
@@ -161,7 +179,7 @@ Fleet is {"stable" if avg_health > 70 else "degrading" if avg_health > 40 else "
         for eq in fleet:
             response += f"• {eq['equipment'].get('equipment_name', eq['equipment_id'])} (Health: {eq['health_score']}%)\n"
 
-        return response + "\n👉 Select two equipment from the dashboard to activate Comparison Mode."
+        return AIChatAssistant._with_suggestions(response + "\nSelect two equipment from the dashboard to compare.", ["Compare top 2 critical machines"])
 
     @staticmethod
     def _explain_anomalies(msg: str, context: Dict) -> str:
@@ -185,7 +203,7 @@ Fleet is {"stable" if avg_health > 70 else "degrading" if avg_health > 40 else "
                     response += f"   Expected range: {sensor['expected_range']}\n"
                     response += f"   Impact: {sensor['contribution_pct']}% of overall risk\n\n"
 
-            return response
+            return AIChatAssistant._with_suggestions(response, ["View sensor timeline", "Download anomaly report"])
         except Exception as e:
             return f"Cannot analyze anomalies: {str(e)}"
 
@@ -200,17 +218,12 @@ Fleet is {"stable" if avg_health > 70 else "degrading" if avg_health > 40 else "
             intel = build_equipment_intelligence(equipment_id)
             forecast = intel.get("forecast", {})
 
-            return f"""**Failure Forecast for {intel.get('equipment_name', equipment_id)}**
-
-📊 **24-Hour Forecast:** {forecast.get('failure_24h', 0)}% failure probability
-📈 **7-Day Forecast:** {forecast.get('failure_7d', 0)}% failure probability
-📉 **Remaining Life:** ~{forecast.get('estimated_remaining_life_days', 0)} days
-
-**Recommendation:**
-{"🟢 Equipment stable - continue normal operation" if forecast.get('failure_24h', 0) < 30 else "🟡 Monitor closely - maintain ready status" if forecast.get('failure_24h', 0) < 60 else "🔴 High risk - prepare for immediate maintenance"}
-
-**Note:** These estimates are based on current sensor readings and historical trends.
-"""
+            summary = (
+                f"Failure Forecast for {intel.get('equipment_name', equipment_id)}:\n"
+                f"24h: {forecast.get('failure_24h', 0)}% | 7d: {forecast.get('failure_7d', 0)}% | Remaining life: ~{forecast.get('estimated_remaining_life_days', 0)} days\n"
+                f"Recommendation: {'stable - continue normal operation' if forecast.get('failure_24h', 0) < 30 else 'monitor closely' if forecast.get('failure_24h', 0) < 60 else 'high risk - prepare for maintenance'}"
+            )
+            return AIChatAssistant._with_suggestions(summary, ["Schedule immediate inspection" if forecast.get('failure_24h', 0) >= 60 else "Add to monitoring watchlist"])
         except Exception as e:
             return f"Cannot forecast: {str(e)}"
 
@@ -222,12 +235,12 @@ Fleet is {"stable" if avg_health > 70 else "degrading" if avg_health > 40 else "
             if not alerts:
                 return "✅ **No Active Alerts** - All systems operating normally."
 
-            response = f"**Active Alerts ({len(alerts)})**\n\n"
+            response = f"Active Alerts ({len(alerts)}):\n\n"
             for alert in alerts:
                 response += f"🔴 **{alert.get('severity', 'Medium')}** - {alert.get('equipment_id', 'Unknown')}\n"
                 response += f"   {alert.get('message', 'Alert triggered')}\n\n"
 
-            return response
+            return AIChatAssistant._with_suggestions(response, ["Acknowledge alerts", "View alert details"])
         except Exception as e:
             return f"Cannot retrieve alerts: {str(e)}"
 
@@ -263,41 +276,39 @@ Fleet is {"stable" if avg_health > 70 else "degrading" if avg_health > 40 else "
             else:
                 response += "➡️ Equipment is stable."
 
-            return response
+            return AIChatAssistant._with_suggestions(response, ["Show full history chart", "Export trend CSV"])
         except Exception as e:
             return f"Cannot analyze trends: {str(e)}"
 
     @staticmethod
     def _provide_help() -> str:
         """Provide help information."""
-        return """**AI Chat Assistant - Available Commands**
-
-Ask me about:
-- **Why is [equipment] critical?** - Explain failure reasons
-- **What's the health status?** - Fleet health overview
-- **Recommend maintenance** - Get maintenance suggestions
-- **Show anomalies** - Detect unusual sensor behavior
-- **Forecast failure** - See failure predictions
-- **Summarize alerts** - View active alerts
-- **Compare equipment** - Side-by-side equipment comparison
-- **Analyze trends** - View equipment degradation trends
-
-💡 **Tip:** Select an equipment card to get equipment-specific analysis!
-"""
+        help_text = (
+            "AI Chat Assistant - Examples:\n"
+            "- Why is Turbine A critical?\n"
+            "- What's the overall fleet health?\n"
+            "- Recommend maintenance for Pump B\n"
+            "- Show anomalies for Compressor A\n\n"
+            "Tip: Select an equipment card before asking equipment-specific questions."
+        )
+        return AIChatAssistant._with_suggestions(help_text, ["Show help again", "Start with 'What's the fleet health?'"])
 
     @staticmethod
     def _general_response(msg: str) -> str:
         """Generate general response."""
-        return """Hello! I'm your Prediction Assistant. I specialize in monitoring equipment health, predicting failures, and recommending maintenance.
+        return (
+            "Hello — I'm your Prediction Assistant. I help monitor equipment health, predict failures, and recommend maintenance.\n\n"
+            "Try: 'Why is Turbine A critical?', 'What's the fleet health?', 'Recommend maintenance for Pump B'.\n\n"
+            "How can I assist you right now?"
+        )
 
-**Try asking me things like:**
-- "Why is Turbine A critical?"
-- "What is the overall fleet health status?"
-- "Recommend maintenance for Pump B"
-- "Show anomalies"
-
-How can I help you today?
-"""
+    @staticmethod
+    def _with_suggestions(text: str, suggestions: List[str]) -> str:
+        """Append short suggested next steps to responses."""
+        if not suggestions:
+            return text
+        sug_text = "\n\nSuggested next steps:\n" + "\n".join(f"- {s}" for s in suggestions)
+        return text + sug_text
 
 
 def format_chat_response(response: str, is_assistant: bool = True) -> Dict[str, Any]:

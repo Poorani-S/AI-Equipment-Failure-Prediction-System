@@ -19,7 +19,7 @@ from model import (
 )
 from database.models import Prediction, db as mongo_db
 from utils.prediction_state import sync_equipment_state
-from utils.auth import login_required
+from utils.auth import AuthenticationManager, login_required
 
 DATASET_PATH = os.path.join(BASE_DIR, DEFAULT_DATASET_PATH)
 MODEL_PATH = os.path.join(BASE_DIR, DEFAULT_MODEL_PATH)
@@ -50,6 +50,17 @@ logging.basicConfig(level=logging.INFO)
 
 from utils.notifications import mail
 mail.init_app(app)
+
+# Register safe_url_for function for templates
+def safe_url_for(endpoint, **kwargs):
+    """Safely generate URLs, returning '#' if endpoint doesn't exist."""
+    try:
+        from flask import url_for as flask_url_for
+        return flask_url_for(endpoint, **kwargs)
+    except:
+        return '#'
+
+app.jinja_env.globals.update(safe_url_for=safe_url_for)
 
 # Register blueprints independently so a single failure doesn't block the others
 try:
@@ -127,20 +138,37 @@ print("="*40 + "\n")
 
 @app.route("/")
 def index():
-    # Always send visitors to the login page first.
-    return redirect(url_for("login_page"))
+    if not AuthenticationManager.is_user_logged_in():
+        return redirect(url_for("auth.login"))
+    return redirect(url_for("home"))
 
 
 @app.route("/login")
 def login_page():
-    return redirect(url_for("auth.login", **request.args))
+    return redirect(url_for("auth.login"))
 
 
 @app.route("/home")
 @login_required
 def home():
-    # Redirect legacy /home to root URL
-    return redirect(url_for("index"))
+    try:
+        return render_template("index.html")
+    except Exception as e:
+        print(f"❌ ERROR in home(): {e}")
+        import traceback
+        traceback.print_exc()
+        # Return a detailed error for debugging
+        return f"""
+        <html>
+        <body style="background: #1a1a2e; color: #fff; font-family: monospace; padding: 40px;">
+            <h2>❌ Error Loading Home Page</h2>
+            <pre style="background: #0f0f1e; padding: 20px; border-radius: 8px; color: #ff6b6b;">
+{str(e)}
+            </pre>
+            <p><a href="/" style="color: #667eea;">← Go Back</a></p>
+        </body>
+        </html>
+        """, 500
 
 
 @app.route("/predict", methods=["POST"])

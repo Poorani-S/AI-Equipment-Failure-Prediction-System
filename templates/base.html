@@ -41,10 +41,10 @@
             <ul class="navbar-menu" id="navbarMenu">
                 <li><a href="{{ url_for('home') }}">Home</a></li>
                 {% if session.user_id %}
-                    <li><a href="{{ url_for('dashboard.index') }}">Equipment Status</a></li>
-                    <li><a href="{{ url_for('dashboard.equipment_status') }}">Dashboard</a></li>
+                    <li><a href="{{ url_for('dashboard.index') }}">Dashboard</a></li>
+                    <li><a href="{{ url_for('dashboard.equipment_status') }}">Equipment Status</a></li>
                     {% if session.role == 'admin' %}
-                    <li><a href="{{ url_for('admin.dashboard') }}">Admin Panel</a></li>
+                    <li><a href="{{ safe_url_for('admin.dashboard') }}">Admin Panel</a></li>
                     {% endif %}
                     <li class="user-info">
                         👤 {{ session.username }}
