@@ -54,6 +54,17 @@ app.config.update(
 init_db()
 mail.init_app(app)
 
+# Register safe_url_for function for templates
+def safe_url_for(endpoint, **kwargs):
+    """Safely generate URLs, returning '#' if endpoint doesn't exist."""
+    try:
+        from flask import url_for as flask_url_for
+        return flask_url_for(endpoint, **kwargs)
+    except:
+        return '#'
+
+app.jinja_env.globals.update(safe_url_for=safe_url_for)
+
 # Register blueprints
 app.register_blueprint(auth_bp)
 app.register_blueprint(dashboard_bp)
